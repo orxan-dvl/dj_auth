@@ -1,0 +1,147 @@
+Django-nun default auth view-ları (məsələn, login/logout) istifadəçi məlumatlarını sessiya əsaslı autentifikasiya ilə idarə edir. 
+Bu məlumatlar brauzerlə server arasında əsasən cookie vasitəsilə paylaşılır. Bu prosesə detallı baxaq:
+
+
+
+### Brauzer və Server Arasındakı Prosesi Step-by-Step İzahlı
+
+#1) İstifadəçinin Login requesti (Request göndərməsi)
+
+1. Brauzerdən request (HTTP Request):
+
+   - İstifadəçi login formuna daxil olur və öz username və password məlumatlarını daxil edərək "Submit" düyməsini basır.
+   - Bu requesti Django serverinə göndərir.
+   - request nümunəsi:
+     http
+     POST /login/ HTTP/1.1
+     Host: 127.0.0.1:8000
+     Content-Type: application/x-www-form-urlencoded
+     username=example_user&password=example_pass
+     
+
+2. Server requesti Qəbul Edir:
+   - Django auth modulu LoginView vasitəsilə bu POST requesti alır.
+   - Məlumatları yoxlayır:
+     - username və password uyğun gəlirmi?
+     - İstifadəçi mövcuddurmu və aktivdir?
+
+------------------------------------------------------------------------------------------------------------
+
+# 2) Təsdiq və Sessiyanın Yaradılması
+
+1. Autentifikasiya Prosesi:
+   - Django authenticate() funksiyası vasitəsilə verilənləri yoxlayır:
+     - Verilən username verilənlər bazasında tapılır.
+     - Şifrə uyğun gəlirsə, istifadəçi uğurla təsdiqlənir.
+   - Misal üçün:
+     python
+     from django.contrib.auth import authenticate
+
+     user = authenticate(username="example_user", password="example_pass")
+     if user is not None:
+         # İstifadəçi təsdiqləndi
+         login(request, user)
+     else:
+         # Təsdiqləmə alınmadı
+     
+
+2. Sessiya Yaradılması:
+   - Django login() funksiyası istifadəçini serverdə sessiya ilə əlaqələndirir.
+   - Sessiya üçün unikal sessiya ID-si yaradılır və bu məlumat Django-nun sessiya cədvəlində saxlanılır.
+   - Misal üçün:
+     python
+     request.session["user_id"] = user.id
+     
+
+3. Sessiya ID-sinin Cookie olaraq Göndərilməsi:
+   - Django sessiya ID-sini cookie şəklində istifadəçinin brauzerinə göndərir:
+     http
+     Set-Cookie: sessionid=<unique_session_id>; HttpOnly; Path=/; Secure
+     
+
+--------------------------------------------------------------------------------------------------------
+
+# 3) Brauzer Məlumatları Saxlayır
+
+1. Cookie-lərin Saxlanması:
+   - Brauzer Set-Cookie başlığını qəbul edir və sessiya ID-sini yaddaşda saxlayır.
+   - Cookie nümunəsi:
+     
+     sessionid=<unique_session_id>;
+     
+
+2. HTTPOnly və Təhlükəsizlik:
+   - Cookie yalnız serverə göndərilə bilər (HttpOnly flag-i var). Bu, JavaScript vasitəsilə cookie oğurluğunu çətinləşdirir.
+   - Secure flag varsa, cookie yalnız HTTPS ilə göndərilir.
+
+------------------------------------------------------------------------------------------------------------
+
+# 4) Sonrakı requestlərdə Sessiyanın İstifadəsi
+
+1. Brauzer request Göndərir:
+   - Sonrakı hər bir HTTP requestində brauzer saxlanmış sessionid cookie-ni avtomatik olaraq göndərir:
+     http
+     GET /profile/ HTTP/1.1
+     Host: 127.0.0.1:8000
+     Cookie: sessionid=<unique_session_id>
+     
+
+2. Server Sessiyanı Doğrulayır:
+   - Django serveri cookie-dəki sessionid-ni qəbul edir.
+   - Sessiya cədvəlində (verilənlər bazasında) bu ID-ni yoxlayır.
+   - Əgər sessiya aktivdirsə, istifadəçi təsdiqlənir və ona uyğun məlumatlar serverdə işlənir.
+
+------------------------------------------------------------------------------------------------------
+
+# 5) Logout Prosesi
+
+1. İstifadəçi Logout requesti Göndərir:
+   - Logout düyməsinə basıldıqda, Django logout() funksiyasını işə salır.
+   - request nümunəsi:
+     http
+     POST /logout/ HTTP/1.1
+     Cookie: sessionid=<unique_session_id>
+     
+
+2. Sessiyanın Silinməsi:
+   - Django serveri sessiyanı verilənlər bazasından silir:
+     python
+     request.session.flush()
+     
+
+3. Cookie-nin Ləğvi:
+   - Django brauzerə köhnə sessiyanı ləğv etmək üçün cookie göndərir:
+     http
+     Set-Cookie: sessionid=; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Path=/
+     
+
+4. Yeni Sessiya Yaradılmır:
+   - Logout tamamlandıqdan sonra istifadəçi yenidən daxil olmadıqca sessiya yaradılmır.
+
+--------------------------------------------------------------------------------------------------------------------
+
+### Brauzer və Server Arasındakı Əlaqəni 
+
+| Addım | Brauzer (Client) Göndərir                         | Server Nə Edir                                               
+|-------|---------------------------------------------------|----------------------------------------------------------------------
+| 1     | POST /login/ ilə username və password             | İstifadəçini yoxlayır, sessiya yaradır və sessionid cookie göndərir. 
+| 2     | GET /profile/ ilə sessionid cookie-ni göndərir    | Cookie-ni təsdiqləyir, istifadəçi məlumatlarını qaytarır.    
+| 3     | POST /logout/ ilə sessionid cookie-ni göndərir    | Sessiyanı silir və cookie-ni ləğv edir.                     
+
+---
+
+### Əsas Təhlükəsizlik Detalları
+
+1. CSRF Mühafizəsi:
+   - Django formalarında csrf_token gözləyir(olmalıdır).
+   - Bu token brauzerdən göndərilir və server bunu yoxlayır.
+
+2. Cookie Təhlükəsizliyi:
+   - Cookie HttpOnly flag ilə qorunur, yəni JavaScript ilə oxumaq mümkün deyil.
+   - Secure flag əlavə edilərsə, cookie yalnız HTTPS üzərindən göndərilər.
+
+3. Sessiyanın Validliyi:
+   - Sessiya serverdə saxlanıldığı üçün, hətta cookie oğurlansa belə sessiyanı serverdən silə bilərsiniz.
+
+-----------------------------------------------------------------------------------------------------------------------------
+

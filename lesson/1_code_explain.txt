@@ -1,0 +1,211 @@
+
+
+
+Django-da authentication sistemi üçün 3 əsas User modeli mövcuddur:
+
+1. User (django.contrib.auth.models) – Default olaraq gəlir.  
+2. AbstractUser (django.contrib.auth.models) – Təkib edilə bilən və genişləndirilə bilən versiyadır.  
+3. AbstractBaseUser (django.contrib.auth.models) – Ən aşağı səviyyəli, özəlləşdirmə üçün nəzərdə tutulmuş bazadır.  
+
+Bir çox hallarda verilənlər bazasında cədvəl yaratmaq üçün Model sinfindən miras almaq kifayətdir. 
+Lakin, User modelində belə deyil. Bunun səbəbi User modelinin özündə xüsusi mexanizmlərin və lazımi metodların mövcud olmasıdır. 
+İndi bu modelləri, onların field və metodlarını incələyərək əsas məqamları nəzərdən keçirək.
+
+------------------------------------------------------------------------------------------------------------------------
+
+Django-nun default olaraq istifadə etdiyi User modeli aşağıdakı kimi təsvir edilir: 
+
+
+class User(AbstractUser):
+    """
+    Django authentication sistemində istifadə olunan default model.
+    Username və password tələb olunur. Digər sahələr isteğe bağlıdır.
+    """
+
+    class Meta(AbstractUser.Meta):
+        swappable = "AUTH_USER_MODEL"
+
+
+Bu model multi-level inheritance prinsipinə əsaslanır:
+
+User → AbstractUser → AbstractBaseUser → Model
+
+- User modeli – AbstractUser sinfindən miras alır.  
+- AbstractUser – Daha geniş sahələr (email, first_name və s.) təqdim edir.  
+- AbstractBaseUser – Minimum sahələr (password, last_login) və fundamental authentication mexanizmlərini təmin edir.
+
+------------------------------------------------------------------------------------------------------------------------
+
+
+Yeni Django layihəsi yaradıldıqda, heç bir dəyişiklik etmədən migrate əmri ilə verilənlər bazasında 
+auth_user adlı bir cədvəl yaradılır. Bu cədvəl default User modelinə əsaslanır.
+
+Superuser Yaratmaq və Admin Panelində Test
+1. createsuperuser komandası ilə bir admin hesab yaradın.  
+2. Admin panelə daxil olun və yeni bir istifadəçi əlavə edin.  
+3. Username və password daxil etdikdən sonra yönləndirilən səhifədəki inputlara baxın.  
+
+Görürük ki:  
+- Password və Last Login sahələri AbstractBaseUser modelindən gəlir.  
+- Digər sahələr (email, first_name, last_name) isə AbstractUser modelindən gəlir.  
+
+Bu, göstərir ki, Django-da default olaraq istifadə edilən User modeli AbstractBaseUser və AbstractUser siniflərindən 
+miras alaraq işləyir.
+
+---------------------------------------------------------------------------------------------------------------------------
+
+
+Modeli Genişləndirmək: AbstractUser və AbstractBaseUser
+
+Əgər default User modelinin sahələri və ya məntiqi sizi qane etmirsə:  
+- Minimal dəyişikliklər üçün AbstractUser modelini istifadə edib onu override edə bilərsiniz.  
+- Əsaslı dəyişikliklər üçün isə daha aşağı səviyyəli AbstractBaseUser modelindən istifadə edərək 
+yeni bir user modeli yarada bilərsiniz.  
+
+-------------------------------------------------------------------------------------------------------------
+
+Authentication URL-ləri və Default Funksionallıqlar
+
+Yeni bir app yaradın və onu layihənizə daxil edin:  
+
+##python manage.py startapp accounts
+
+
+Default Authentication URL-lərini İstifadə Etmək
+Django authentication sisteminə aid default URL-ləri layihəyə əlavə etmək üçün main.urls.py faylına aşağıdakı sətiri əlavə edin:
+
+path('auth/', include("django.contrib.auth.urls")),
+
+
+Bu sətiri əlavə etdikdən sonra, aşağıdakı default endpointlər avtomatik olaraq layihəyə əlavə olunur:
+- /auth/login/ – Login səhifəsi.
+- /auth/logout/ – Logout funksionallığı.
+- /auth/password_reset/ – Şifrə yeniləmə.
+
+Bu endpointlərin harda təyin olunduğunu öyrənmək üçün django.contrib.auth.urls faylını yoxlaya bilərsiniz.
+
+-------------------------------------------------------------------------------------------------------------
+
+login.html Faylını Yaratmaq
+Login üçün minimal bir template yaradın və onu templates/registration/login.html olaraq saxlayın:
+
+
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<h2>Login</h2>
+<form method="post">
+    {% csrf_token %}
+    {{ form }}
+    <button type="submit">Login</button>
+</form>
+{% endblock %}
+
+
+Buradakı:
+- {% csrf_token %} – CSRF qorunması üçün tələb olunur.  
+- {{ form }} – Django tərəfindən avtomatik yaradılan form obyektidir. 
+
+-------------------------------------------------------------------------------------------------------------
+
+settings.py faylında aşağıdakı sətiri əlavə edin:
+
+LOGIN_REDIRECT_URL = "/"
+
+Bu, login uğurlu olduqdan sonra istifadəçinin hansı səhifəyə yönləndirilməsini müəyyən edir. 
+Əgər bu parametr əlavə edilməzsə, Django default olaraq /accounts/profile/ səhifəsinə yönləndirir.
+
+-------------------------------------------------------------------------------------------------------------
+
+
+Base Template-də Logout Buttonu
+
+base.html faylına aşağıdakı formu əlavə edin:
+
+{% if user.is_authenticated %}
+    <form action="{% url 'logout' %}" method="post">
+        {% csrf_token %}
+        <button type="submit">Logout</button>
+    </form>
+{% else %}
+    <a href="{% url 'login' %}">Login</a>
+{% endif %}
+
+
+#### Logout Redirect URL
+Logout olduqdan sonra istifadəçinin yönləndiriləcəyi səhifəni təyin etmək üçün settings.py faylına bu sətiri əlavə edin:
+python
+LOGOUT_REDIRECT_URL = "/"
+
+
+----------------------------------------------------------------------------------------------------------------
+
+### Register Funksionallığı
+
+Django default olaraq register üçün bir endpoint təqdim etmir. 
+Bunun məqsədi, qeydiyyat prosesinin tamamilə sizin tərəfinizdən idarə edilməsini təmin etməkdir.
+
+-Register View Yaratmaq
+
+accounts/views.py faylında qeydiyyat üçün bir View yaradın:
+
+from django.contrib.auth.forms import UserCreationForm
+from django.urls import reverse_lazy
+from django.views.generic import CreateView
+
+class SignUpView(CreateView):
+    form_class = UserCreationForm
+    success_url = reverse_lazy("login")
+    template_name = "registration/signup.html"
+
+
+#### Register Template Yaratmaq
+templates/registration/signup.html faylını yaradın:
+html
+{% extends "base.html" %}
+
+    {% block title %}
+        Sign Up
+    {% endblock %}
+
+    {% block content %}
+        <h2>Sign Up</h2>
+        <form method="post">
+            {% csrf_token %}
+            {{ form }}
+            <button type="submit">Sign Up</button>
+        </form>
+    {% endblock %}
+
+-------------------------------------------------------------------------------------------------------------
+
+#### Register URL Təyin Etmək
+accounts/urls.py faylında register üçün endpoint yaradın:
+python
+from django.urls import path
+from .views import SignUpView
+
+urlpatterns = [
+    path('signup/', SignUpView.as_view(), name='signup'),
+]
+
+-------------------------------------------------------------------------------------------------------------
+
+#### Main URL-lərdə İnteqrasiya
+Nəhayət, main/urls.py faylında accounts/urls.py faylını daxil edin:
+python
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("accounts/", include("accounts.urls")),
+    path("accounts/", include("django.contrib.auth.urls")),
+    path("", TemplateView.as_view(template_name="home.html"), name="home"),
+]
+
+
+-------------------------------------------------------------------------------------------------------------
+
+
+
+
