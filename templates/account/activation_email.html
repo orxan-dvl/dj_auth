@@ -1,0 +1,10 @@
+{% autoescape off %}
+    Salam {{ user.email }},
+    
+Hesabınızı təsdiqləmək üçün aşağıdakı linkə tıklayın:
+
+http://{{ domain }}{% url 'verify_email' uidb64=uid token=token %}
+
+Hörmətlə,
+    Orxan Zekiyev
+{% endautoescape %}

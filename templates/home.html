@@ -1,17 +1,10 @@
-{% extends "base.html" %}
-
-{% block title %}Home{% endblock %}
+{% extends 'base.html' %}
 
 {% block content %}
-{% if user.is_authenticated %}
-<p>Hi {{ user.username }}!</p>
-<p><a href="{% url 'password_change' %}">Password Change</a></p>
-<form action="{% url 'logout' %}" method="post">
-  {% csrf_token %}
-  <button type="submit">Log Out</button>
-</form>
-{% else %}
-<p>You are not logged in</p>
-<a href="{% url 'login' %}">Log In</a>
-{% endif %}
+    <h1>Ana Səhifəyə Hoş Gəlmisiniz</h1>
+    {% if user.is_authenticated %}
+        <p>Xoş gəlmisiniz, {{ user.email }}!</p>
+    {% else %}
+        <p>Giriş etmək üçün <a href="{% url 'login' %}">buraya klikləyin</a></p>
+    {% endif %}
 {% endblock %}

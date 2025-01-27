@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Qeydiyyatdan Keçin</h2>
+
+<form method="POST">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="g-recaptcha" data-sitekey="{{ RECAPTCHA_PUBLIC_KEY }}"></div>
+    <button type="submit">Qeydiyyatdan Keçin</button>
+</form>
+
+<p>Hesabınız artıq var? <a href="{% url 'login' %}">Daxil olun</a></p>
+{% endblock %}
