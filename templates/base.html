@@ -1,33 +1,31 @@
 <!DOCTYPE html>
 <html lang="az">
-  <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Authentication Sistemi</title>
-      <link rel="stylesheet" href="style.css">
-  </head>
-  <body>
-      <header>
-          <nav>
-              <ul>
-                  <li><a href="{% url 'home' %}">Ana Səhifə</a></li>
-                  {% if user.is_authenticated %}
-                      <li><a href="{% url 'logout' %}">Çıxış</a></li>
-                  {% else %}
-                      <li><a href="{% url 'login' %}">Daxil ol</a></li>
-                      <li><a href="{% url 'register' %}">Qeydiyyat</a></li>
-                  {% endif %}
-              </ul>
-          </nav>
-      </header>
-
-      <main>
-          {% block content %}
-          {% endblock %}
-      </main>
-
-      <footer>
-          <p>&copy; 2025 Authentication Sistemi</p>
-      </footer>
-  </body>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Authentication Sistemi</title>
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
+        <header>
+            <nav>
+                <ul>
+                    <li><a href="{% url 'home' %}">Ana Səhifə</a></li>
+                    {% if user.is_authenticated %}
+                    <li><a href="{% url 'logout' %}">Çıxış</a></li>
+                    {% else %}
+                    <li><a href="{% url 'login' %}">Daxil ol</a></li>
+                    <li><a href="{% url 'register' %}">Qeydiyyat</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </header>
+        <main>
+            {% block content %}
+            {% endblock %}
+        </main>
+        <footer>
+            <p>&copy; 2025 Authentication Sistemi</p>
+        </footer>
+    </body>
 </html>

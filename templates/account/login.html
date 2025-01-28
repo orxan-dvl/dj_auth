@@ -5,7 +5,9 @@
 
     <form method="POST">
     {% csrf_token %}
-    {{ form.as_p }}
+    <input type="email" name="email" placeholder="email">
+    <input type="password" name="password" placeholder="password">
+
     <button type="submit">Daxil ol</button>
     </form>
 

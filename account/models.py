@@ -1,6 +1,18 @@
+from django.contrib.auth.models import AbstractUser, BaseUserManager, UserManager
 from django.db import models
 
-from django.contrib.auth.models import User
+from account.managers import CustomUserManager, CustomBaseUserManager
 
-class AbstractBaseUser(models.Model):
-    username = models.CharField()
+
+
+class CustomUser(AbstractUser):
+    username = None
+    email = models.EmailField(unique=True)
+    
+    objects = CustomUserManager()
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = []
+    
+    
+

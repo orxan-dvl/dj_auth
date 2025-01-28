@@ -15,6 +15,7 @@ ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
 
+    'django_recaptcha',
     
     'django.contrib.admin',
     'django.contrib.auth',
@@ -22,6 +23,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
+    'account',
     
 
 
@@ -149,3 +152,23 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 LOGIN_REDIRECT_URL = "/"
 
+
+
+
+#CAPTCHA SETTINGS
+RECAPTCHA_PUBLIC_KEY = config('RECAPTCHA_PUBLIC_KEY')
+RECAPTCHA_PRIVATE_KEY = config('RECAPTCHA_PRIVATE_KEY')
+RECAPTCHA_USE_SSL = config('RECAPTCHA_USE_SSL', cast=bool)
+
+
+#EMAIL SETTINGS
+EMAIL_BACKEND = config('EMAIL_BACKEND')
+EMAIL_HOST = config('EMAIL_HOST')
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_PORT = config('EMAIL_PORT', cast=int)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+
+
+    
+AUTH_USER_MODEL = "account.CustomUser"

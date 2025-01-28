@@ -1,0 +1,723 @@
+##Task
+
+Authentication sistemi yaradılmalıdı.
+1)
+db de user table ucun lazım olan fieldlər, hec bir field silinmeyecek sadece email baza field goturulecek
+-firstname
+-lastname
+-email
+-password
+-is_staff
+-is_active
+-date_joined
+-last_login
+
+db de hemcinin permissionlari ve grouplari saxlayan table da olmalidir.
+
+
+2)userin qeydiyyat formunda userden yalniz sifre ve eamil teleb olunacaq. email unique olmalidir. elave olaraq 
+qeydiyyat formunda recaptcha istifade olunmalidir. 
+3)user qeydiyyat formunu ugurlu doldurub submit etdikden sonra user db elave olunmalidir, ama is_active =false olmalidir,
+yeni qeydiyyatdan kecse bele siteme login icazesi verilmeyecek.. ugurlu submitden sonra user email tesdiqi ile bagli
+pop up bildirisi almalidir, ve sistem userin emailine hesab tesdiqi ucun link gondermelidir, bu linkin de yarim saat
+omru olmalidir
+4)user hesabini emaile gelen linke daxil olaraq tesdiqledikden sonra user.is_active=true olmalidir, yeni sisteme 
+login icazesi verilecek
+--------------------------------------------------------------------------------------------------------------------
+
+gelin ise baslayaq. Demisdik ki django da user table hazir class sablonlar movcuddur, yeni user, hetta permission, groups
+ucun class X(models.models) de klas yaradib inherit almagimiza ehtiyac yoxdur..
+
+3 hazir class vardi, User, AbstractUser, AbstractBaseUser.. 
+User clasi override etmek ucun meslehet olmadigindan iki secimimiz qalir.. gelin her iki klasi fieldleri ile birlikde
+analiz edek ve gorek ki bizden teleb olunan user table ucun hansi clasi override ederek yazmaq daha az kod yazmagimiza sebeb olacaq
+
+ilk once bizden permissions, ve groups table lari istenilir, ama bu tablelarda her hansi deyisiklik nezerde tutulmur.
+demeli groups ve permissions ucun nezerde tutulan claslari deyismeye ehtiyac yoxdur, oldugu kimi inherit ede bilerik
+
+indi gelek user table ucun nezerde tutulan fieldlere baxaq..
+
+------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+User table ucun nezerde tutulan classlara fikir versek gorerik ki,
+AbstractBaseUser clasinda 3 field var, password, last_login ve is_active..
+yeni CustomUser clasimizi AbstractBaseUser den inherit almaqla yaratmaga cehd etsek, taskda teleb edilen
+diger fieldleri elle teyin etmeli olmalacayiq
+
+daha az kodla bu isi gore bilmek ucun, AbstractUser clasindan inherit almaqla CustomUser clasini
+teyin etmek olar, AbstractUser clasina baxsaq gorerik, taskda bizden teleb edilen standart permission
+ve group ucun tablelara nezaret eden klass olan PermissionMixin den inherit goturur hemin bu klass.
+bu o demekdir, yaradacigimiz yeni CustomUser klasi eger AbstractUser den inherit alarsa, avtomatik 
+olaraq permission ve group lar ucun table lara sahib olmus olacaq...
+
+qalir tek isimiz.. taskda bizden istenilmeyen ama AbstractUser de movcud olan username fieldini legv etmek.
+bunu nece etmeli oldugumuzu asagida gosterecem.
+
+bunun ucun account/models.py da asagidaki kodlari yazmaq lazimdi
+
+from django.contrib.auth.models import AbstractUser
+from account.models import CustomUserManager
+
+class CustomUser(AbstractUser):
+    username = None  
+    email = models.EmailField(unique=True)
+    objects = CustomUserManager()
+
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = []
+
+burada ne etdik.. username=None yazmaqla bu fieldi legv etdik.. lastname firstname kimi fieldleri
+yazmaga ehtiyacimiz qalmadi.. cunki parent klasdan avtomatik goturecek. bes niye email fieldi manual
+sekilde teyin etdik? AbstractUser klasindaki email fieldine diqqetle baxsaniz gorersiniz ki 
+unique=True adli option yoxdur, ama bizim user table in de bu muhum xususiyyet sayildigindan var olmasi
+vacibdir.. ona gore hemin field optionu elave etmek ucun fieldi cagirib override etdik.
+
+USERNAME_FIELD bu esas deyisendir, beleki login olan zaman userin sifresini hansi fielde esasen yoxlamali
+oldugunu gosterir.. 
+
+REQUIRED_FIELDS  listi ise, create_superuser komandasi zamani terminal promptunun bizden passowrd
+ve cari klasdaki USERNAME_FIELD deyerini temsil eden fieldden basqa mutleq olmasi lazim olan fieldleri gosterir..
+
+yeni biz REQUIRED_FIELDS firstname fieldini elave etsek, create_superuser komandasi bizden email, sifre 
+ve firstname teleb edecek..
+
+gorurem ki, hem import error alinmasi hem de size yad gelen, hem de movcud olmayan CustomUserManager
+movzusu haqqinda suallariniz yaranib.. danisacam sebrli olun..
+
+-------------------------------------------------------------------------------
+
+CustomUserManager movuzunu izah etmemisden qabaq account/managers.py adli faylda asagidaki
+kodlari yazin
+
+#
+from django.contrib.auth.models import UserManager, BaseUserManager
+
+class CustomUserManager(UserManager):
+    
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError("Email address is required")
+        email = self.normalize_email(email)
+        extra_fields.setdefault("is_active", False)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("is_active", True)
+
+        if not extra_fields.get("is_staff"):
+            raise ValueError("Superuser must have is_staff=True.")
+        if not extra_fields.get("is_superuser"):
+            raise ValueError("Superuser must have is_superuser=True.")
+
+        return self.create_user(email, password, **extra_fields)
+
+
+class CustomBaseUserManager(BaseUserManager):
+
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError("The Email field is required.")
+        email = self.normalize_email(email)
+        extra_fields.setdefault('is_staff', False)
+        extra_fields.setdefault('is_active', False)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        if not extra_fields.get('is_staff'):
+            raise ValueError("Superuser must have is_staff=True.")
+        if not extra_fields.get('is_superuser'):
+            raise ValueError("Superuser must have is_superuser=True.")
+        return self.create_user(email, password, **extra_fields)
+
+
+
+eslinde burada bir klas olmalidir.. men 2 eded ferqli adda ama eyni isi goren klas yazmisam.
+fikir versez gorersiz ki, ozumuzun yaratdigi custom managerler ferqli classlardan inherit goturubler..
+ama her iki klasda da eyni metodlar cagrilaraq override olunub..
+evvelce onu demeliyem ki, birini secib veziyyete uygun yazmalisiniz.. movcud taska esasen 2 si de uygundur..
+hansi istesez teyin edib istifade ede bilersiniz..
+
+indi gelek izaha.. create_user metodu django proyektinde settings.py da qeyd edilen
+user table kimi isledilen klass obyektlerinden adi tip(yeni superuser olmayan) userlerin yaranmasi
+zamani avtomatik ise dusen funksiyadir.. 
+
+
+gorurem ki create_user metodunun parametrlerine baxdiqda suallariniz yaranir.. yaranmalidi da..
+zennimce email parametrinden behs etmeye ehtiyac yoxdur.. ama hiss edirem ki, iciniz de sual var ki,
+niye password=None qeyd edilib, extra_fields nedir?
+
+password=None ona gore qeyd edilib(baxmayaraq ki bu taskda ele bir teleb yoxdur) 
+Bəzən istifadəçilər sistem tərəfindən avtomatik olaraq yaradılır 
+(məsələn, sosial media inteqrasiyası və ya idarəçi tərəfindən əlavə edilən istifadəçilər). 
+Bu zaman parol sonradan istifadəçiyə göndərilən email ilə təyin edilir.
+qisaca password=None yazmaqla, istifadeci parolu veribse parol tehlukesiz sekilde has edilib saxlanilir,
+
+extra_fields ise, python funksiyalarinda ist olunan(**kwargs) isini gorur.. yeni olmasi vacib
+olmayan namelum sayda parametr.. burada email ve passwordan basqa diger fieldler hemin argument(parametr)
+ler toplusuna daxil olacaq..
+
+burada basqa 2 yeni funksiya goruruk. normalize_email() metodu emaili split edir. 
+parent klasdan baxa bilersiz. set_password ise qabul elediyi sifreni hashleyir.
+extra_fields de coxlu field var, niye mehz is_active i false edirik? cunki taskda bizden user qeydiyat edilerek
+yarandigi zaman, user table na insert olunan user in hele aktivlesmesini istmeir.. yalniz emaile gelen
+confirmation_Link tesdiqlendikden sonra is_active=TRue olsun serti qoyulub bize. nezere alsaq ki, is_active=False
+olarsa user sisteme loqin ola bilmir, onda size her sey aydin olmalidir mence..
+en sonda user i db e save edirik.
+
+diqqetle oxuyun. CustomUserManager klasinin create_user metodu yalniz CustomUser modelinden(klasindan)
+obyekt yarandigi(torendiyi ) zaman ise dusur, formdan ya da basqa unsurden torendiyi zaman yox.
+bunun sebebi odur ki, CustomUserManager clasi CustomUser clasinin obyektlerinin meneceri kimi ozunu aparir..
+
+
+create_superuser metodu eyni parametleri alir,metod sonda create_user metodunuu return da isletdiyine gore
+burada normalize_email, sifre hashing proseslerini tekrarlamaga ehtiyac yoxdur, ancaq elave bir iki is gormeliyik
+create_user den ferqli ola bilecek.. meselen.. create_superuser komandasi netcesinde yaranacaq admin userlerin
+is_staff, is_active, is_superuser statuslari true olmalidir ki, biz de kodda onlari yerine yetirmisik..
+
+-----------------------------------------------------------------------------
+
+bu deyisiklerden sonra account/admin.py da yeni yaranmis CustomUser modelini register ede bilersiz.
+
+from django.contrib import admin
+
+from account.models import CustomUser
+
+admin.site.register(CustomUser)
+
+------------------------------------------------------------------------
+
+ve settings.py un sonuna(adeten sona yazirlar seliqeli olsun deye)  asagidaki kodu elave edin
+
+AUTH_USER_MODEL = "account.CustomUser"
+
+
+bax indi makemigrations ve migrate komandalarini icra edib, daha sonra superuser yarada bilersiniz..
+
+
+----------------------------------------------------------------------------------------
+
+bilirik full stack yazmaq istediyimiz bu layihenin tam erseye gelmesi ucun 4 esas unsur lazimdi..
+
+database, endpointler, endpointlerin trigger elediyi view(controllerler) ve view larin render etdiyi htmller..
+
+meselenin database hisseni models, managers yazmaqla hell etdik.. gelin davamini yazaq..
+
+-------------------------------------------------------------------------------------------
+
+gelin evvelce html lerden baslayaq.. templates/base.html yaradaq.. burada bize 3 funksionalliq
+login, logout, register ucun link lazim olacaq.. gelin navbarda onu verek. htmli izah etmeyecem
+
+templates/base.html
+
+<!DOCTYPE html>
+<html lang="az">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Authentication Sistemi</title>
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
+        <header>
+            <nav>
+                <ul>
+                    <li><a href="{% url 'home' %}">Ana Səhifə</a></li>
+                    {% if user.is_authenticated %}
+                    <li><a href="{% url 'logout' %}">Çıxış</a></li>
+                    {% else %}
+                    <li><a href="{% url 'login' %}">Daxil ol</a></li>
+                    <li><a href="{% url 'register' %}">Qeydiyyat</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </header>
+        <main>
+            {% block content %}
+            {% endblock %}
+        </main>
+        <footer>
+            <p>&copy; 2025 Authentication Sistemi</p>
+        </footer>
+    </body>
+</html>
+
+--------------------------------------------------------------------------------------
+
+indi ise sistemin ilkin sehifesi olan home.html i yaradaq..
+
+#templates/home.html
+
+{% extends 'base.html' %}
+
+{% block content %}
+    <h1>Ana Səhifəyə Xoş Gəlmisiniz</h1>
+    {% if user.is_authenticated %}
+        <p>Xoş gəlmisiniz, {{ user.email }}!</p>
+    {% else %}
+        <p>Giriş etmək üçün <a href="{% url 'login' %}">buraya klikləyin</a></p>
+    {% endif %}
+{% endblock %}
+
+-----------------------------------------------------------------------------------
+
+indi ise viewlari yazmaga baslayaq.. ilk once home.htmli render eden funksiya ve logoutu yazaq.
+
+#account/views.py
+
+from django.shortcuts import render, redirect
+from django.contrib.auth import authenticate, login, logout
+
+
+def home(request):
+    return render(request, 'home.html')
+
+
+def user_logout(request):
+    logout(request)
+    return redirect('home')
+
+ilk once deyim ki, logout ucun yazdigim funksiya adini ferqli adlandirdigimi sezdiz yeqin ki, 
+sebebi import olunan logout adli funskiyanin olmasidir.. import olunan bu funksiya logout isini gormekle
+yanasi sessiya cookieden lazimi melumatlarin silinme prosesini ozu avtomatik heyata keciri
+
+-----------------------------------------------------------------------------------
+
+indi endpointleri baglamaq qaldi..
+
+#account/urls.py
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('login/', views.user_login, name='login'),
+
+]
+
+home funskiyasini birbasa proyektin urls de vermek niyyetindeyem..
+-----------------------------------------------------------------------------------
+
+gelin account namespace ni baglayaq.. bunun ucun main urls.py da asagidaki kodu elave edin
+
+auth_learn/urls.py
+
+from django.contrib import admin
+from django.urls import path, include
+from account.views import home
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    path("account/", include("account.urls")),
+    path("", home, name="home"),
+]
+
+---------------------------------------------------------------------------------------
+
+#run etdiyiniz zaman html setirlerini isare eden errorlar aldigini hiss etmis kimiyem..
+telesmeyin, html de linklerini verdiyimiz diger endpointler hele hazir deyil, ona gore..
+
+onun ucun gelin register funksiyasindan baslayaq... demeli user register olandan derhal sonra userin
+emailine tesdiq mesaji getmelidi...user yaranmalidi ama giris icazi olmali deyil ve s...
+
+-------------------------------------------------------------------------------------------
+evvelce email funksionalligindan qurasdirilmasindan baslayaq..
+
+eger python-decouple varsa isimiz cox asandir, yoxdursa pip install python-decouple yazaraq yukleyin..
+
+biz email ucun google smtp yeni(gmail) den istifade edeceyik.. umumiyyetle gmailde nece avtomatik
+email gonderme funksionalligini aktivlesdirmek lazimdi bu tam ayri movzudu..
+bunun ucun linki paylasiram "https://www.geeksforgeeks.org/setup-sending-email-in-django-project/"
+
+
+indi ise kodlara kecek.. tehlukesizlik baximdan gmail settings variablelar .env tipli faylda qeyd olunmalidir
+
+eslinde .env faylimi sizinle paylasmaq hec duzgun olmasa da, size guvenim sonsuzdur..
+
+asagidaki kodlari .env faylina elave edin
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_USE_TLS = True
+EMAIL_PORT = 587
+EMAIL_HOST_USER = 'zekiyev014@gmail.com'
+EMAIL_HOST_PASSWORD = 'odzbeidfbncdllhm'
+
+decouple istifade edirsinizse, settings.py lap yuxarisina from decouple import config
+importunu elave edin
+
+--------------------------------------------------------------------------
+
+indi gelin viewlara davam edek, eslinde register yazmali idik, register prosesinin ortasinda
+email tesdiqlenme prosesi icra olunmalidi, demeli evvelce email tesdiqlemek ucun funksiya yazmaliyiq ki,
+registerde istifade ede bilek
+
+views.py a asagidaki kodlari elave edin
+#account/views.py
+
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from django.contrib.auth.tokens import default_token_generator
+from django.http import HttpResponse
+
+
+def verify_email(request, uidb64, token):
+    try:
+        uid = urlsafe_base64_decode(uidb64).decode()
+        user = CustomUser().objects.get(pk=uid)
+
+        if default_token_generator.check_token(user, token):
+            user.is_active = True
+            user.save()
+            return HttpResponse("Hesabınız uğurla təsdiq edildi. İndi daxil ola bilərsiniz.")
+        else:
+            return HttpResponse("Təsdiq linki etibarsızdır.")
+    except (TypeError, ValueError, OverflowError, CustomUser().DoesNotExist):
+        return HttpResponse("Təsdiq linki etibarsızdır.")
+
+
+##############
+bu funksiya ucun urls.py a da elaveleri edek ve izaha baslayaq.
+
+#account/urls.py  
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('logout/', views.user_logout, name='logout'),
+    path('verify/<uidb64>/<token>/', views.verify_email, name='verify_email'),
+]
+
+
+endpointden gorunduyu kimi, path funksiyasi 2 ci parametri olan verify_email funksiyasina
+uidb64 ve token adli 2 argument pack etmeye calisacaq.. ona gore funksiyamiz request den elave
+bu 2 arqumenti qebul edib.. 
+
+uidb64 dəyəri Base64 ilə kodlanmış istifadəçi id-sini saxlayır. Bu, dekodlanaraq real id əldə edilir.
+
+default_token_generator.check_token() ise 
+Django-nun default_token_generator metodu vasitəsilə tokenin istifadəçiyə uyğunluğunu yoxlayır.
+-----------------------------------------------------------------
+
+indi ise gelin register funksionalligini yazaq..
+
+evvelce bize template lazim olacaq..
+
+templates/account/register.html asagidaki kodu elave edin
+#templates/account/register.html
+
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Qeydiyyatdan Keçin</h2>
+
+<form method="POST">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="g-recaptcha" data-sitekey="{{ RECAPTCHA_PUBLIC_KEY }}"></div>
+    <button type="submit">Qeydiyyatdan Keçin</button>
+</form>
+
+<p>Hesabınız artıq var? <a href="{% url 'login' %}">Daxil olun</a></p>
+{% endblock %}
+
+-----------------------------------------------------------------------------------------------
+
+templates/account/activation_email.html de asagidaki kodu yazin
+
+#templates/account/activation_email.html
+
+{% autoescape off %}
+    Salam {{ user.email }},
+    
+Hesabınızı təsdiqləmək üçün aşağıdakı linkə tıklayın:
+
+http://{{ domain }}{% url 'verify_email' uidb64=uid token=token %}
+
+Hörmətlə,
+    Orxan Zekiyev
+{% endautoescape %}
+
+-------------------------------------------------------------------------
+
+register view da ve html de hazir inputlar(sablon) istifade etmek ve frontda validasiyani
+avtomatiklesdirmek ucun bize django register ucun django forms lazim olacaq.. 
+
+formlarda yeni frontda botlarin post sorgularini nisbeten skip elemek ecen google recaptchadan istifade
+ede bilerik.. bunun ucun evvelce django-recaptcha ni install etmeliyik
+
+#pip install django-recaptcha
+
+ve settings.py INSTALLED_APP listinin 1 ci elementi olaraq 'django_recaptcha' str ini elave etmeliyik
+
+settings.py
+
+INSTALLED_APPS = [
+
+    'django_recaptcha',
+    
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    
+    'account',
+]
+
+hemcinin .env faylina recaptcha credentiallari elave etmeliyik ve onu settings.py da tehlukesiz sekilde
+teyin etmeliyik.. 
+
+eger ozunuz oz google hesabinizdan free sekilde recaptcha credential almaq isteyirsinizse
+asagidaki linke baxin..
+"https://dev.to/yashpatel_py/django-recaptcha-581b"
+
+
+men asan olsun deye hem oz .env faylimi paylasacam.. siz de .env in asagisina bunlari elave edin..
+
+.env
+
+RECAPTCHA_PUBLIC_KEY=6LfjIb0UAAAAAEKAvJWFO5KuZ1liUpxAg5BaJU2v
+RECAPTCHA_PRIVATE_KEY=6LfjIb0UAAAAAD-yZnpZl1PNYq1DZjPSyONihuu_
+RECAPTCHA_USE_SSL=True
+
+daha sonra settings.py sonluguna asagidaki deyisenleri elave edin
+
+#CAPTCHA SETTINGS
+RECAPTCHA_PUBLIC_KEY = config('RECAPTCHA_PUBLIC_KEY')
+RECAPTCHA_PRIVATE_KEY = config('RECAPTCHA_PRIVATE_KEY')
+RECAPTCHA_USE_SSL = config('RECAPTCHA_USE_SSL', cast=bool)
+
+
+elave olaraq qeyd edim ki, yaratdigimiz register.html de setir 9 da recaptcha ni istifade etmisik ki, 
+frontda gorune bilsin
+
+---------------------------------------------------------------------------------
+
+
+recaptcha settings ve qurasdirilmalar hazirdirsa, artiq formlara kece bilerik..
+
+asagidaki kodlari account/forms.py a elave edin
+
+#account/forms.py
+from django import forms
+from django.core.exceptions import ValidationError
+from django_recaptcha.widgets import ReCaptchaV2Checkbox
+from django_recaptcha.fields import ReCaptchaField
+from account.models import CustomUser
+
+
+class CustomUserRegistrationForm(forms.ModelForm):
+    password = forms.CharField(widget=forms.PasswordInput)
+    recaptcha = ReCaptchaField(widget=ReCaptchaV2Checkbox)
+
+    class Meta:
+        model = CustomUser
+        fields = ['email', 'password']
+
+    def clean_email(self):
+        email = self.cleaned_data.get("email")
+        if CustomUser.objects.filter(email=email).exists():
+            raise ValidationError("Bu email ünvanı artıq qeydiyyatdan keçib.")
+        return email
+
+
+CustomUserRegistrationForm un inheritance aldigi ModelForm ele bir klasdirki, Meta klasinda
+appoint edildiyi klass deyerinin fieldlerinin avtomatik fieldleri ucun input yaradir.
+eger biz fields=['email', 'password'] yazmasaydiq, diger fieldler(meselen firstname, lastname)
+ucun de input yaratmis olacaqdi.. bize ise qeydiyyat sehifesinde 2 input ve recaptcha box kifayet edir..
+
+
+clean_email metodu bes nedir? deye bilersiniz ki, axi biz onsuz da qeydiyyat zamani ve basqa yerlerde
+backendde defelerle userin movcudlugunu yoxluyuruq.. yeniden elave olaraq niye yoxlayaq ki?
+
+unutmayin ki, formlar inputa (html teqlerine) cevrilir.. bu da frontla baglidir.. yeni burada
+clean_email metodu birbasa validasiya prosesini frontda aparir.. user existed email yazib submite basarsa,
+ona ele hemin inputun altinda "Bu email ünvanı artıq qeydiyyatdan keçib". 
+deye xeberdarliq mesaji gosterilecek
+
+------------------------------------------------------------------
+
+indi gelin regiser ucun view yazaq..
+
+account/views.py a asagidaki funskiyani ve importlari elave edin
+
+#account/views.py
+from django.contrib.sites.shortcuts import get_current_site
+from django.contrib import messages
+from django.template.loader import render_to_string
+from django.core.mail import send_mail
+from django.conf import settings
+
+from account.forms import CustomUserRegistrationForm
+from account.models import CustomUser
+
+
+def register(request):
+    if request.method == 'POST':
+        form = CustomUserRegistrationForm(request.POST)
+        if form.is_valid():
+            user = CustomUser().objects.create_user(
+                email=form.cleaned_data['email'],
+                password=form.cleaned_data['password'],
+                is_active=False)
+
+            token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(str(user.pk).encode())
+            current_site = get_current_site(request)
+            mail_subject = 'Hesabınızı təsdiq edin'
+            message = render_to_string('account/activation_email.html', {
+                'user': user,
+                'domain': current_site.domain,
+                'uid': uid,
+                'token': token,
+            })
+            send_mail(mail_subject, message, settings.DEFAULT_FROM_EMAIL, [user.email])
+
+            messages.success(request, "Qeydiyyatınız uğurla tamamlandı. Emailinizə təsdiq linki göndərildi.")
+            return redirect('login')
+        else:
+            messages.error(request, "Formda səhvlər var. Zəhmət olmasa yenidən yoxlayın.")
+    else:
+        form = CustomUserRegistrationForm()
+
+    return render(request, 'account/register.html', {'form': form})
+
+uzun kod gorub qorxmuyun, setir be setir izah edeceyik.. mence funksiyanin ilk2 setrinin izaha ehtiyaci
+yoxdu, en azi size.. 
+
+input_with_datas = CustomUserRegistrationForm(request.POST)
+input_empty = CustomUserRegistrationForm()
+
+yeqin ki input_with_datas ile input_empty nin ferqini bilirsiz...
+input with empty adi get sorgusu zamani userin gorduyu bos inputlardir..
+
+input_with_datas ise userin inputlarin icerini doldurduqdan sonra submit duymesine klikleyerek
+post sorgusu ile frontdan backende gonderdiyi dictionary dir..
+
+is_valid() metodu bes haradan gelir..
+form=CustomUserRegistrationForm() yeni form deyiseni CustomUserRegistrationForm clasindan torenmis obyektdir..
+
+asagida multivelel_inheritance_ardicilligini gosterirem
+CustomUserRegistrationForm=>ModelForm=>BaseModelForm=>BaseForm
+
+beli is_valid() BaseForm clasinda instance metodudur, inheritance ile form deyisenine kecib..
+go to definition ederek ne is gorduyunu asanliqla anlaya bilersiniz..
+
+
+##########
+
+he harda qalmisdiq.. register view da setir 39 da.. eslinde sintaksdan hiss olunur ki, burada user yaradilir..
+amma nece yaradilir.. hansi usul ile? metod tanis gelmelidir.. CustomUserManager clasindaki 
+create_user metodu.. Beli, demisdik ki bu metod userleri menece edir, onlari yaradib birbasa db e save
+edir, ona gore burada save metodundan istifade etmeye ehtiyac qalmiyib.. user yaradib db e save etdiyimiz
+anda gorersiniz ki, is_active=False veririk, cunki bizden taskda yalniz account_confirmationdan sonra
+bu statusu true teleb etmek teleb olunur..
+
+
+he bu arada form.cleaned_data  BaseForm clasindan gelen dict tipinde datadir..
+
+setir 578 de token, setir 579 de ise link yaradilir.. setir 580 ise isteyin atildigi domaini mueyyenlisdirir
+
+daha sonra import etdiyimiz send_email funksiyasi gelir, izah ucun send_emailin ilk 4 parametrini qeyd edecem
+
+send_email(emailin_movzusu, emailin_mesaj_hissesi, kimden_gedecek, kimlere_gedecek)
+
+setir 591 ugurlu registerden sonra logine yonlendirmedir.
+
+setir 593 ise formda userin sehvi bas vererse olmali olan hissedir..
+
+setir 595 de ise get sorgusu zamani (sehifeye ilk istek atilanda ya da refresh edilende) olacaq
+htmldeki inputlarin veziyyetidir..
+------------------------------------------------------------------------------------------
+
+bu qeder sade... indi ise yazdigimiz viewlari endpointlere baglayaq.. account/urls.py hazirki
+veziyyeti asagidaki kimi olmalidir
+
+#account/urls.py
+
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('logout/', views.user_logout, name='logout'),
+    path('register/', views.register, name='register'),
+    path('verify/<uidb64>/<token>/', views.verify_email, name='verify_email'),
+]
+
+
+-------------------------------------------------------------------------------------------
+
+en sona logini saxlamisdiq.. login ucun de html de el ile input yazib sonra mexsusi validasiya aparmaqdansa
+django forms dan istifade etmek daha meqsede uygundur.. ama men ferqli variasiyalar goresiniz deye
+forms olmadan html de inputu el ile verib, datani birbasa htmlden cekmeyi gostermek isteyirem..
+
+
+duzdu bununla tanissiniz ozu de defelerle..
+
+def user_login(request):
+    if request.method == "POST":
+        email = request.POST['email']
+        password = request.POST['password']
+        user = authenticate(request, email=email, password=password)
+        print(user)
+        if user:
+            if user.is_active:
+                login(request, user)
+                return redirect("home")
+            else:
+                messages.error(request, "Hesabınız təsdiqlənməyib. Zəhmət olmasa emailinizi yoxlayın.")
+                return redirect('login')
+        else:
+            messages.error(request,"Please try again")
+    return render(request, 'account/login.html', )
+
+
+#yene de fikir verdiniz ise login funksiyanin adini ferqli yazmaga calisdim, cunki
+yuxarida import djangodan gelen login funksiyasi da var..
+
+
+setir 673 deki beraberliyin sag terefindeki olan "email"  login.html de 8ci yerlesen input teginin
+name atributundan gelir..
+
+hemcinin setir 674deki password da..
+
+authenticate metodu ise, email ve pasword esasinda databasada bele bir userin olub olmadigini gosterir,
+varsa hemin tapilan useri, yoxdusa None qaytarir..
+
+user qeydiyyatdan kecib, emailindeki linki tesdiqlememis de login olmaq isteye biler..
+bu zaman onun is_active statusu false olacaq.. ona gore de yoxluyub icaze verirem setir 678-679 da..
+
+diger setirlerin izahina ehtiyac yoxdu mence...
+
+---------------------------------------------------------------------------------------------------
+
+son olaraq qaldi login endpointini qosmaq..
+
+account/urls.py in son veziyeti asagidaki kimi olacaq..
+
+#account/urls.py
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path('login/', views.user_login, name='login'),
+    path('logout/', views.user_logout, name='logout'),
+    path('register/', views.register, name='register'),
+    path('verify/<uidb64>/<token>/', views.verify_email, name='verify_email'),
+]
+
+-----------------------------------------------------------------------------------------
